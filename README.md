@@ -79,7 +79,6 @@ Ak máte chybu typu `port is already allocated`:
 Skontrolujte, či sú v `.env` správne nastavené API URL:
 ```bash
 VITE_API_URL=http://localhost:8000
-VITE_BACKEND_API_URL=http://localhost:8010
 ```
 
 ---
