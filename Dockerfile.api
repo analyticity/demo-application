@@ -1,0 +1,35 @@
+# ---------- Accidents API (FastAPI + Poetry) ----------
+# You used python:3.13 originally; we'll keep it.
+FROM python:3.13-slim
+
+# Set a predictable workdir
+WORKDIR /app
+
+# System deps (wget for pulling data files; add build tools if your deps need compiling)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      wget ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry globally (no venvs to keep container lean)
+RUN pip install --no-cache-dir poetry \
+  && poetry config virtualenvs.create false
+
+# Copy dependency manifests first for better layer caching
+COPY accidents_api/pyproject.toml accidents_api/poetry.lock* /app/
+
+# Install Python deps declared in pyproject
+RUN poetry install --no-root --no-interaction --no-ansi
+
+# Copy application code
+COPY accidents_api/bp_api /app/bp_api
+
+# Ensure data directory exists and download artifacts (as in your original Dockerfile)
+RUN mkdir -p /app/bp_api/data \
+  && wget --no-check-certificate "https://docs.google.com/uc?export=download&id=1ADLDX5NtWgq3kEHWOHMkz7sUb7ml_-C3" -O /app/bp_api/data/nehody.geojson \
+  && wget --no-check-certificate "https://docs.google.com/uc?export=download&id=1xfmS9xCgC926nAtVbqvVe5T0-pZBtzOs" -O /app/bp_api/data/processed_alerts.json
+
+# Expose the API port
+EXPOSE 8000
+
+# Start the FastAPI app with uvicorn
+CMD ["uvicorn", "bp_api.main:app", "--host", "0.0.0.0", "--port", "8000"]

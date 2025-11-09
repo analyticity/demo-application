@@ -1,0 +1,121 @@
+version: "3.8"
+
+services:
+  brno-db:
+    image: timescale/timescaledb-ha:pg14-latest
+    container_name: brno_db
+    env_file: [ .env.example ]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB_BRNO}
+      POSTGRES_USER: ${POSTGRES_USER_BRNO}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_BRNO}
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./database_creation/init.sql:/docker-entrypoint-initdb.d/00_init.sql:ro
+      - ./database_creation/data/db_brno:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER_BRNO} -d ${POSTGRES_DB_BRNO} -h 127.0.0.1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  # Loader image s ENTRYPOINT-om (žiadny command v compose)
+  brno-bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile.loader
+    container_name: brno_bootstrap
+    depends_on:
+      brno-db:
+        condition: service_healthy
+    env_file: [ .env.example ]
+    environment:
+      DB_HOST: brno-db
+      DB_PORT: 5432
+      # make sure Python can import from root (for connection_to_db.py)
+      PYTHONPATH: /app:/app/database_creation
+    volumes:
+      - ./database_creation:/app/database_creation:ro
+      - ./data:/app/data:ro
+      - ./connection_to_db.py:/app/connection_to_db.py:ro  # mount the root file
+    restart: "no"
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin_demo
+    env_file: [ .env.example ]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+    ports:
+      - "8080:80"
+    depends_on:
+      - brno-db
+    restart: unless-stopped
+
+  accidents_api:
+    build:
+      context: .                 # build from repo root
+      dockerfile: Dockerfile.api
+    container_name: accidents_api
+    ports:
+      - "8000:8000"              # host → container
+    restart: unless-stopped
+    # If later you make the API talk to the DB, you’ll already share the default network.
+    # depends_on:
+    #   brno-db:
+    #     condition: service_started
+    healthcheck:
+      test: [ "CMD", "wget", "-qO", "-", "http://127.0.0.1:8000/docs" ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  analyticity-backend:
+    build:
+      context: ./Analyticity-backend         # cesta k priečinku so súborom Dockerfile a requirements.txt
+      dockerfile: Dockerfile
+    container_name: analyticity_backend
+    env_file: [ .env ]                          # používa existujúci .env v root-e demo-app
+    environment:
+      # mapujeme na očakávané názvy vo vašom kóde (DB_BRNO_*)
+      DB_BRNO_HOST: ${DB_HOST:-brno-db}       # vnútri docker siete sa DB volá 'brno-db'
+      DB_BRNO_PORT: ${DB_PORT:-5432}
+      DB_BRNO_USER: ${POSTGRES_USER_BRNO}
+      DB_BRNO_PASSWORD: ${POSTGRES_PASSWORD_BRNO}
+      DB_BRNO_NAME: ${POSTGRES_DB_BRNO}
+    depends_on:
+      brno-db:
+        condition: service_healthy            # štartni až keď DB beží
+    ports:
+      - "8010:8010"
+    restart: unless-stopped
+#     (voliteľné pre hot-reload počas vývoja)
+    volumes:
+      - ./Analyticity-backend/AnalyticityBackend:/app/AnalyticityBackend
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend.dev
+    container_name: bp_frontend_dev
+    env_file: [ .env ]                 # VITE_* premenné berieme z tvojho root .env
+    environment:
+      # potrebné, aby Vite v kontajneri videl zmeny súborov
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - ./frontend:/app              # live code
+      - frontend_node_modules:/app/node_modules  # neprepíš node_modules
+    ports:
+      - "5173:5173"                  # Vite dev server
+      - "5174:5174"                  # HMR (vite často používa 5174)
+    depends_on:
+      - accidents_api
+      - analyticity-backend
+    restart: unless-stopped
+
+volumes:
+  frontend_node_modules:

@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+psycopg2-binary
+pytz
+pydantic
+geopandas
+geopy
+scipy
+numpy
+pandas

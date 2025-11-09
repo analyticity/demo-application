@@ -1,0 +1,22 @@
+FROM python:3.11-slim
+
+# Install minimal system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# Install Python packages needed by your loader scripts
+# (includes pandas, psycopg2, and dotenv for environment handling)
+RUN pip install --no-cache-dir \
+    psycopg2-binary \
+    python-dotenv \
+    pandas
+
+# Working directory
+WORKDIR /app
+
+# Copy loader entrypoint
+COPY ops/loader_entrypoint.sh /usr/local/bin/loader_entrypoint.sh
+RUN chmod +x /usr/local/bin/loader_entrypoint.sh
+
+# Default entrypoint runs your Python scripts (loaders)
+ENTRYPOINT ["/usr/local/bin/loader_entrypoint.sh"]

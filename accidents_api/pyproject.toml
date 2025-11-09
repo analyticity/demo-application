@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "bp-api"
+version = "0.1.0"
+description = ""
+authors = ["Veronika Simkova <v.simkovaa@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = {extras = ["standard"], version = "^0.115.5"}
+geopandas = "^1.0.1"
+requests = "^2.32.3"
+jupyter = "^1.1.1"
+scipy = "^1.15.2"
+geopy = "^2.4.1"
+numpy = "^2.2.5"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
